@@ -1,10 +1,34 @@
+import { initializeApp } from "https://www.gstatic.com/firebasejs/13.3.0/firebase-app.js";
+import { getAnalytics, isSupported } from "https://www.gstatic.com/firebasejs/13.3.0/firebase-analytics.js";
+import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/13.3.0/firebase-auth.js";
+import { getFirestore, collection, doc, getDocs, onSnapshot, setDoc, deleteDoc, writeBatch } from "https://www.gstatic.com/firebasejs/13.3.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBfwon4kiCkBc2KMnzH82viNWkRM5E1tP8",
+  authDomain: "koyomi-96cd7.firebaseapp.com",
+  projectId: "koyomi-96cd7",
+  storageBucket: "koyomi-96cd7.firebasestorage.app",
+  messagingSenderId: "237812391840",
+  appId: "1:237812391840:web:c90d8873c053f634cb0ec5",
+  measurementId: "G-NZSLBRWPYX"
+};
+const firebaseApp = initializeApp(firebaseConfig);
+const auth = getAuth(firebaseApp);
+const db = getFirestore(firebaseApp);
+isSupported().then(ok => ok ? getAnalytics(firebaseApp) : null).catch(()=>{});
+let currentUser = null, cloudUnsubscribe = null, cloudReady = false, suppressCloudWrite = false;
+
 (() => {
 const $ = id => document.getElementById(id);
 const STORE = "koyomi_events_v2", PREFS = "koyomi_prefs_v2", PHOTO_DB = "koyomi_photo_db";
 const presets = [{name:"ラベンダー",color:"#9b8bd7"},{name:"ローズ",color:"#d98fae"},{name:"ミント",color:"#72b9a5"},{name:"スカイ",color:"#78a9d5"},{name:"ピーチ",color:"#e6a27f"},{name:"レモン",color:"#c5b45e"},{name:"ネイビー",color:"#64769f"},{name:"モノトーン",color:"#777783"}];
 let events = loadEvents(), now = new Date(), shown = new Date(now.getFullYear(),now.getMonth(),1), prefs = loadPrefs(), photoUrl = null, toastTimer;
 function loadEvents(){try{return JSON.parse(localStorage.getItem(STORE)||"[]")}catch{return []}}
-function saveEvents(){localStorage.setItem(STORE,JSON.stringify(events));$("saveIndicator").textContent="✓ 保存しました"}
+function saveEvents(){localStorage.setItem(STORE,JSON.stringify(events));$("saveIndicator").textContent=currentUser?"☁ 同期中…":"✓ この端末に保存";if(currentUser && cloudReady && !suppressCloudWrite) syncAllEventsToCloud().catch(err=>{console.error(err);showToast("クラウド保存に失敗しました")});} 
+async function syncAllEventsToCloud(){if(!currentUser)return;const ref=collection(db,"users",currentUser.uid,"events");const old=await getDocs(ref);const batch=writeBatch(db);const ids=new Set(events.map(e=>e.id));old.forEach(d=>{if(!ids.has(d.id))batch.delete(d.ref)});events.forEach(e=>batch.set(doc(ref,e.id),e));await batch.commit();$("saveIndicator").textContent="☁ 同期済み"}
+function watchCloud(user){if(cloudUnsubscribe)cloudUnsubscribe();cloudReady=false;const ref=collection(db,"users",user.uid,"events");cloudUnsubscribe=onSnapshot(ref,async snap=>{if(!cloudReady){if(snap.empty && events.length){await syncAllEventsToCloud();}else{const cloud=snap.docs.map(d=>d.data());suppressCloudWrite=true;events=cloud;localStorage.setItem(STORE,JSON.stringify(events));suppressCloudWrite=false;render();}cloudReady=true;}else{const cloud=snap.docs.map(d=>d.data());suppressCloudWrite=true;events=cloud;localStorage.setItem(STORE,JSON.stringify(events));suppressCloudWrite=false;render();}$("saveIndicator").textContent="☁ 同期済み";},err=>{console.error(err);showToast("クラウド同期に接続できません")})}
+function updateAccountUI(user){$("accountName").textContent=user?(user.displayName||"ログイン中"):"ゲスト利用中";$("accountEmail").textContent=user?(user.email||"Googleアカウント"):"この端末に保存しています";$("accountAvatar").textContent=user?(user.displayName||user.email||"K").slice(0,1).toUpperCase():"K";$("authForms").hidden=!!user;$("signedInPanel").hidden=!user;$("authStatus").textContent=user?"ログイン済みです。予定はFirebaseに同期されます。":"ログインすると予定をFirebaseに保存し、対応端末で同期できます。";$("signedInText").textContent=user?`ログイン中：${user.email||user.displayName||"Googleアカウント"}`:"";$("saveIndicator").textContent=user?"☁ 接続中":"この端末に保存"}
+onAuthStateChanged(auth,user=>{currentUser=user;updateAccountUI(user);if(user)watchCloud(user);else{if(cloudUnsubscribe)cloudUnsubscribe();cloudUnsubscribe=null;cloudReady=false;events=loadEvents();render();}});
 function loadPrefs(){try{return {...{accent:"#9b8bd7",opacity:18,blur:0,fontScale:"normal",showWeekends:true,showOutside:true,compactMode:false,weekStart:0},...JSON.parse(localStorage.getItem(PREFS)||"{}")}}catch{return {accent:"#9b8bd7",opacity:18,blur:0,fontScale:"normal",showWeekends:true,showOutside:true,compactMode:false,weekStart:0}}}
 function savePrefs(){localStorage.setItem(PREFS,JSON.stringify(prefs));applyPrefs()}
 function hexRgb(hex){let n=parseInt(hex.slice(1),16);return [(n>>16)&255,(n>>8)&255,n&255]}
@@ -21,6 +45,7 @@ function parseDate(s){let [y,m,d]=s.split("-").map(Number);return new Date(y,m-1
 function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
 function render(){
  $("monthHeading").textContent=`${shown.getFullYear()}年${shown.getMonth()+1}月`;
+ if($("jumpYear")){$("jumpYear").value=shown.getFullYear();$("jumpMonth").value=shown.getMonth()+1;}
  const grid=$("calendarGrid");grid.innerHTML="";
  const weekdays=["日","月","火","水","木","金","土"];const start=prefs.weekStart||0;
  for(let i=0;i<7;i++){let w=(i+start)%7;let el=document.createElement("div");el.className="weekday"+(prefs.showWeekends&&[0,6].includes(w)?" weekend":"");el.textContent=weekdays[w];grid.append(el)}
@@ -53,15 +78,36 @@ function closeModal(id){$(id).hidden=true}
 $("eventForm").addEventListener("submit",ev=>{ev.preventDefault();let id=$("eventId").value;let item={id:id||crypto.randomUUID(),title:$("eventTitle").value.trim(),date:$("eventDate").value,time:$("eventTime").value,category:$("eventCategory").value,color:$("eventColor").value,location:$("eventLocation").value.trim(),memo:$("eventMemo").value.trim(),allDay:$("eventAllDay").checked};if(!item.title||!item.date)return;if(id)events=events.map(e=>e.id===id?item:e);else events.push(item);saveEvents();closeModal("eventModal");render();showToast(id?"予定を更新しました":"予定を追加しました")});
 $("deleteEventBtn").addEventListener("click",()=>{let id=$("eventId").value;if(confirm("この予定を削除しますか？")){events=events.filter(e=>e.id!==id);saveEvents();closeModal("eventModal");render();showToast("予定を削除しました")}});
 $("addEventBtn").onclick=()=>openEvent(null,dateKey(now));$("prevMonth").onclick=()=>{shown.setMonth(shown.getMonth()-1);render()};$("nextMonth").onclick=()=>{shown.setMonth(shown.getMonth()+1);render()};$("todayBtn").onclick=()=>{shown=new Date(now.getFullYear(),now.getMonth(),1);render()};$("searchInput").oninput=render;
+const yearSelect=$("jumpYear"), monthSelect=$("jumpMonth");
+for(let y=now.getFullYear()-5;y<=now.getFullYear()+15;y++){let o=document.createElement("option");o.value=y;o.textContent=y;yearSelect.append(o)}
+for(let m=1;m<=12;m++){let o=document.createElement("option");o.value=m;o.textContent=m;monthSelect.append(o)}
+function jumpMonth(){shown=new Date(+yearSelect.value,+monthSelect.value-1,1);render()}
+yearSelect.onchange=jumpMonth;monthSelect.onchange=jumpMonth;
 document.querySelectorAll("[data-close]").forEach(b=>b.onclick=()=>closeModal(b.dataset.close));
-["eventModal","settingsModal"].forEach(id=>$(id).addEventListener("click",e=>{if(e.target===$(id))closeModal(id)}));
+["eventModal","settingsModal","accountModal"].forEach(id=>$(id).addEventListener("click",e=>{if(e.target===$(id))closeModal(id)}));
 function exportJson(){let blob=new Blob([JSON.stringify({app:"Koyomi",version:2,exportedAt:new Date().toISOString(),events},null,2)],{type:"application/json"});download(blob,"koyomi-backup.json")}
 function download(blob,name){let a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
-$("exportBtn").onclick=exportJson;$("settingsExport").onclick=exportJson;
+$("menuExport").onclick=exportJson;$("settingsExport").onclick=exportJson;
 function importFile(file){if(!file)return;let r=new FileReader();r.onload=()=>{try{let data=JSON.parse(r.result),incoming=Array.isArray(data)?data:data.events;if(!Array.isArray(incoming))throw Error();let clean=incoming.filter(e=>e&&e.title&&e.date).map(e=>({...e,id:e.id||crypto.randomUUID()}));if(confirm(`${clean.length}件の予定を読み込みます。既存の予定に追加しますか？`)){let map=new Map(events.map(e=>[e.id,e]));clean.forEach(e=>map.set(e.id,e));events=[...map.values()];saveEvents();render();showToast("読み込みました")}}catch{alert("ファイルを読み込めませんでした。KoyomiのJSONバックアップを選んでください。")}};r.readAsText(file)}
 $("importInput").onchange=e=>importFile(e.target.files[0]);$("settingsImport").onchange=e=>importFile(e.target.files[0]);
-$("icsBtn").onclick=()=>{let lines=["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Koyomi//JP"];events.forEach(e=>{let d=e.date.replaceAll("-","");lines.push("BEGIN:VEVENT","UID:"+e.id+"@koyomi","DTSTART"+(e.allDay?";VALUE=DATE:"+d:":"+d+"T"+(e.time||"0900").replace(":","")+"00"),"SUMMARY:"+e.title.replace(/[\\;,]/g," "),"DESCRIPTION:"+((e.memo||"").replace(/[\\;,]/g," ")),"END:VEVENT")});lines.push("END:VCALENDAR");download(new Blob([lines.join("\r\n")],{type:"text/calendar"}),"koyomi-events.ics")};
-$("openSettings").onclick=()=>{syncSettingsUI();$("settingsModal").hidden=false};
+$("menuIcs").onclick=()=>{closeDrawer();let lines=["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Koyomi//JP"];events.forEach(e=>{let d=e.date.replaceAll("-","");lines.push("BEGIN:VEVENT","UID:"+e.id+"@koyomi","DTSTART"+(e.allDay?";VALUE=DATE:"+d:":"+d+"T"+(e.time||"0900").replace(":","")+"00"),"SUMMARY:"+e.title.replace(/[\\;,]/g," "),"DESCRIPTION:"+((e.memo||"").replace(/[\\;,]/g," ")),"END:VEVENT")});lines.push("END:VCALENDAR");download(new Blob([lines.join("\r\n")],{type:"text/calendar"}),"koyomi-events.ics")};
+$("openSettings")?.addEventListener("click",()=>{syncSettingsUI();$("settingsModal").hidden=false});
+function openDrawer(){$("appDrawer").classList.add("open");$("drawerScrim").hidden=false;$("menuToggle").setAttribute("aria-expanded","true");$("appDrawer").setAttribute("aria-hidden","false")}
+function closeDrawer(){$("appDrawer").classList.remove("open");$("drawerScrim").hidden=true;$("menuToggle").setAttribute("aria-expanded","false");$("appDrawer").setAttribute("aria-hidden","true")}
+$("menuToggle").onclick=openDrawer;$("menuClose").onclick=closeDrawer;$("drawerScrim").onclick=closeDrawer;
+$("menuAdd").onclick=()=>{closeDrawer();openEvent(null,dateKey(now))};
+$("menuToday").onclick=()=>{closeDrawer();shown=new Date(now.getFullYear(),now.getMonth(),1);render()};
+$("menuSearch").onclick=()=>{closeDrawer();$("searchInput").focus();$("searchInput").scrollIntoView({behavior:"smooth",block:"center"})};
+$("menuSettings").onclick=()=>{closeDrawer();syncSettingsUI();$("settingsModal").hidden=false};
+$("menuExport").onclick=()=>{closeDrawer();exportJson()};
+$("menuIcs").onclick=()=>{closeDrawer();$("icsBtn").click()};
+$("menuAccount").onclick=()=>{closeDrawer();$("accountModal").hidden=false};
+$("desktopAddBtn").onclick=()=>$("addEventBtn").click();
+$("emailLogin").onclick=async()=>{try{await signInWithEmailAndPassword(auth,$("authEmail").value.trim(),$("authPassword").value);showToast("ログインしました")}catch(e){showToast(authError(e))}};
+$("emailSignup").onclick=async()=>{try{await createUserWithEmailAndPassword(auth,$("authEmail").value.trim(),$("authPassword").value);showToast("アカウントを作成しました")}catch(e){showToast(authError(e))}};
+$("googleLogin").onclick=async()=>{try{await signInWithPopup(auth,new GoogleAuthProvider());showToast("Googleでログインしました")}catch(e){showToast(authError(e))}};
+$("signOutBtn").onclick=async()=>{try{await signOut(auth);closeModal("accountModal");showToast("ログアウトしました")}catch(e){showToast(authError(e))}};
+function authError(e){const map={"auth/invalid-email":"メールアドレスを確認してください","auth/missing-password":"パスワードを入力してください","auth/weak-password":"パスワードは6文字以上にしてください","auth/email-already-in-use":"このメールアドレスは登録済みです","auth/invalid-credential":"メールアドレスまたはパスワードが違います","auth/popup-closed-by-user":"ログインをキャンセルしました","auth/operation-not-allowed":"Firebase Consoleでこのログイン方法を有効にしてください"};return map[e.code]||"ログインできませんでした。設定と通信環境を確認してください"}
 function syncSettingsUI(){ $("customColor").value=prefs.accent;$("colorValue").textContent=prefs.accent;$("photoOpacity").value=prefs.opacity;$("photoBlur").value=prefs.blur;$("fontScale").value=prefs.fontScale;$("showWeekends").checked=prefs.showWeekends;$("showOutside").checked=prefs.showOutside;$("compactMode").checked=prefs.compactMode;$("weekStart").value=prefs.weekStart;
  $("swatches").innerHTML=presets.map(p=>`<button class="swatch ${prefs.accent.toLowerCase()===p.color?"active":""}" title="${p.name}" aria-label="${p.name}" style="background:${p.color}" data-color="${p.color}"></button>`).join("");document.querySelectorAll(".swatch").forEach(b=>b.onclick=()=>setColor(b.dataset.color));renderPhotoPreview()}
 function setColor(c){prefs.accent=c;savePrefs();$("customColor").value=c;$("colorValue").textContent=c;document.querySelectorAll(".swatch").forEach(b=>b.classList.toggle("active",b.dataset.color===c));render();showToast("テーマカラーを変更しました")}
