@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#9b8bd7">
+<title>Koyomi カレンダー</title><link rel="stylesheet" href="styles.css">
+</head>
+<body class="app-body">
+<header class="app-header"><a class="brand" href="index.html"><span class="brand-mark">K</span>Koyomi</a><div class="header-actions"><span class="save-indicator" id="saveIndicator">この端末に保存</span><button class="icon-button" id="openSettings" aria-label="設定">⚙</button></div></header>
+<main class="app-shell" id="appShell">
+  <section class="toolbar">
+    <div><div class="eyebrow">MY CALENDAR</div><h1 id="monthHeading">2026年11月</h1></div>
+    <div class="toolbar-actions"><button class="button button-soft" id="todayBtn">今日</button><button class="button button-primary" id="addEventBtn">＋ 予定を追加</button></div>
+  </section>
+  <section class="calendar-panel">
+    <div class="calendar-controls"><div class="month-nav"><button class="icon-button" id="prevMonth" aria-label="前の月">‹</button><button class="icon-button" id="nextMonth" aria-label="次の月">›</button></div><div class="view-label">月表示</div><input id="searchInput" class="search-input" placeholder="予定を検索…" aria-label="予定を検索"></div>
+    <div class="calendar-grid" id="calendarGrid"></div>
+  </section>
+  <section class="below-grid"><div class="upcoming-panel"><div class="section-heading"><h2>これからの予定</h2><span class="muted" id="eventCount">0件</span></div><div id="upcomingList" class="upcoming-list"></div></div>
+  <aside class="quick-panel"><h2>クイックメニュー</h2><button class="quick-link" id="exportBtn">⇩　予定をJSONで保存</button><label class="quick-link file-label">⇧　JSONから予定を読み込む<input type="file" id="importInput" accept="application/json"></label><button class="quick-link" id="icsBtn">▦　カレンダー形式（ICS）で保存</button><p class="tip">予定はこのブラウザ内に保存されます。大切なデータは定期的に書き出してください。</p></aside></section>
+</main>
+<div class="modal-backdrop" id="eventModal" hidden><section class="modal" role="dialog" aria-modal="true" aria-labelledby="eventModalTitle"><div class="modal-head"><h2 id="eventModalTitle">予定を追加</h2><button class="icon-button" data-close="eventModal">×</button></div><form id="eventForm"><input type="hidden" id="eventId"><label>予定のタイトル<input id="eventTitle" required maxlength="100" placeholder="例：友だちとカフェ"></label><div class="form-row"><label>日付<input type="date" id="eventDate" required></label><label>開始時刻<input type="time" id="eventTime"></label></div><div class="form-row"><label>カテゴリ<select id="eventCategory"><option>プライベート</option><option>学校</option><option>仕事</option><option>家族</option><option>その他</option></select></label><label>色<input type="color" id="eventColor" value="#9b8bd7"></label></div><label>場所<input id="eventLocation" maxlength="120" placeholder="場所・住所（任意）"></label><label>メモ<textarea id="eventMemo" rows="3" maxlength="1000" placeholder="メモを入力…"></textarea></label><label class="check-label"><input type="checkbox" id="eventAllDay"> 終日</label><div class="modal-actions"><button type="button" class="button button-danger" id="deleteEventBtn" hidden>削除</button><span></span><button type="button" class="button button-soft" data-close="eventModal">キャンセル</button><button class="button button-primary" type="submit">保存する</button></div></form></section></div>
+<div class="modal-backdrop" id="settingsModal" hidden><section class="modal settings-modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle"><div class="modal-head"><div><div class="eyebrow">PERSONALIZE</div><h2 id="settingsTitle">表示・テーマ設定</h2></div><button class="icon-button" data-close="settingsModal">×</button></div>
+<div class="settings-tabs"><button class="tab active" data-tab="appearance">テーマ・写真</button><button class="tab" data-tab="display">表示設定</button><button class="tab" data-tab="data">データ</button></div>
+<div class="tab-content" id="tab-appearance"><h3>テーマカラー</h3><p class="muted">アプリ全体のアクセントカラーを変更できます。</p><div class="swatches" id="swatches"></div><label>好きな色を選ぶ<div class="color-picker-row"><input type="color" id="customColor" value="#9b8bd7"><span id="colorValue">#9b8bd7</span></div></label><hr><h3>背景写真</h3><p class="muted">自分の写真をカレンダーの背景に設定できます。写真はこの端末内に保存されます。</p><label class="upload-box">📷 写真を選ぶ<input type="file" id="backgroundInput" accept="image/*"></label><div class="photo-preview" id="photoPreview"><span>写真はまだ設定されていません</span></div><label>写真の透明度 <input type="range" id="photoOpacity" min="5" max="45" value="18"></label><label>ぼかし <input type="range" id="photoBlur" min="0" max="12" value="0"></label><button class="button button-soft" id="clearPhoto">写真を解除</button><hr><h3>文字の雰囲気</h3><label>文字サイズ<select id="fontScale"><option value="small">小さめ</option><option value="normal" selected>標準</option><option value="large">大きめ</option></select></label></div>
+<div class="tab-content" id="tab-display" hidden><h3>カレンダー表示</h3><label class="setting-check"><input type="checkbox" id="showWeekends" checked> 土日を色分けする</label><label class="setting-check"><input type="checkbox" id="showOutside" checked> 前後の月の日付も表示する</label><label class="setting-check"><input type="checkbox" id="compactMode"> コンパクト表示</label><label>週の開始日<select id="weekStart"><option value="0">日曜日</option><option value="1">月曜日</option></select></label><p class="tip">表示設定はこの端末に保存されます。</p></div>
+<div class="tab-content" id="tab-data" hidden><h3>データ管理</h3><p>予定データをJSON形式でバックアップできます。写真やテーマ設定はJSONには含まれません。</p><button class="button button-soft" id="settingsExport">予定をバックアップ</button><label class="upload-box">バックアップを読み込む<input type="file" id="settingsImport" accept="application/json"></label><button class="button button-danger" id="clearAllEvents">すべての予定を削除</button><p class="tip">この試作版ではログイン・クラウド同期・招待リンクによる共有はまだ有効ではありません。複数端末での同期にはサーバー機能の追加が必要です。</p></div>
+<div class="modal-actions"><span class="muted" id="settingsStatus">変更は自動保存されます</span><button class="button button-primary" data-close="settingsModal">完了</button></div>
+</section></div>
+<div class="toast" id="toast" role="status"></div>
+<script src="app.js"></script>
+</body></html>
